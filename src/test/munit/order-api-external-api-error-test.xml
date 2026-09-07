@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit" xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools  http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+	<munit:config name="order-api-external-api-error-test.xml" />
+	<munit:test name="order-api-external-api-error-test-post:\orders:application\json:RouterTest" doc:id="964fdbf6-ec86-45f8-9898-b26f543a5d84" description="Test" expectedErrorType="APP:EXTERNAL_API_ERROR">
+		<munit:behavior >
+			<munit-tools:mock-when doc:name="Mock when" doc:id="c7763d43-c814-440c-8d5c-35d9804d2c77" processor="http:request">
+				<munit-tools:with-attributes >
+					<munit-tools:with-attribute whereValue="GET" attributeName="method" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return >
+					<munit-tools:error typeId="HTTP:CONNECTIVITY" />
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+		<munit:execution >
+			<munit:set-event doc:name="Set Event" doc:id="30e7efd8-f5b0-4210-896b-4c766f57fa63" >
+				<munit:payload value='#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;  customerId: "CUST001",&#10;  customerName: "Pradeep",&#10;  customerEmail: "pradeep@gmail.com",&#10;  items: [&#10;    {&#10;      productId: "P001",&#10;      quantity: 2&#10;    }&#10;  ]&#10;}]' mediaType="application/json" />
+			</munit:set-event>
+			<flow-ref doc:name="Flow-ref to post:\orders:application\json:Router" doc:id="982be1a0-c119-4cfe-84e6-533f7ec37ada" name="post:\orders:application\json:Router"/>
+		</munit:execution>
+	</munit:test>
+
+
+</mule>

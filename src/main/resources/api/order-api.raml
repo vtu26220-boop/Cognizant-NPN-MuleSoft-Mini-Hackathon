@@ -1,0 +1,88 @@
+#%RAML 1.0
+
+title: Order Management API
+version: v1
+baseUri: http://localhost:8081
+
+/orders:
+  post:
+    description: Create a new customer order
+
+    body:
+      application/json:
+        example:
+          {
+            "customerId": "CUST001",
+            "customerName": "Pradeep",
+            "customerEmail": "pradeep@gmail.com",
+            "items": [
+              {
+                "productId": "P001",
+                "quantity": 2
+              },
+              {
+                "productId": "P002",
+                "quantity": 1
+              }
+            ]
+          }
+
+    responses:
+      201:
+        body:
+          application/json:
+            example:
+              {
+                "orderId": "ORD1001",
+                "customerId": "CUST001",
+                "subtotal": 12000,
+                "discount": 1200,
+                "totalAmount": 10800,
+                "status": "CONFIRMED",
+                "message": "Order created successfully"
+              }
+
+      400:
+        body:
+          application/json:
+            example:
+              {
+                "errorCode": "INVALID_REQUEST",
+                "message": "Invalid order request"
+              }
+
+      404:
+        body:
+          application/json:
+            example:
+              {
+                "errorCode": "PRODUCT_NOT_FOUND",
+                "message": "Product not found"
+              }
+
+      409:
+        body:
+          application/json:
+            example:
+              {
+                "errorCode": "INSUFFICIENT_STOCK",
+                "message": "Insufficient stock"
+              }
+
+      502:
+        body:
+          application/json:
+            example:
+              {
+                "errorCode": "EXTERNAL_API_ERROR",
+                "message": "External API failure"
+              }
+
+      500:
+        body:
+          application/json:
+            example:
+              {
+                "errorCode": "INTERNAL_SERVER_ERROR",
+                "message": "Unexpected error"
+              }

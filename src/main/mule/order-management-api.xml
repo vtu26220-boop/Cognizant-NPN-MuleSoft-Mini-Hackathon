@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<flow name="order-management-apiFlow" doc:id="e6773cdf-3cf0-4f98-8805-1eec792568d3" >
+		<http:listener doc:name="Listener" doc:id="83c8a408-d799-4bac-918a-86357c35ac84" config-ref="HTTP_Listener_config" path="/order-management/orders"/>
+		<ee:transform doc:name="Transform Message" doc:id="159befe3-4722-467f-ae90-c691e115dfae" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    orderId: "ORD" ++ randomInt(9000),
+    customerId: payload.customerId,
+    status: "CONFIRMED",
+    message: "Order created successfully"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>

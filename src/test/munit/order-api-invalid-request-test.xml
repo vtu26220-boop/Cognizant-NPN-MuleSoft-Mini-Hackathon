@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit" xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools  http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+	<munit:config name="order-api-invalid-request-test.xml" />
+	<munit:test name="order-api-invalid-request-test-post:\orders:application\json:RouterTest" doc:id="afbfdf13-a824-483e-a6a1-32b7950de9f6" description="Test" expectedErrorType="APP:INVALID_REQUEST">
+		<munit:execution >
+			<munit:set-event doc:name="Set Event" doc:id="1d717811-5c8d-4258-a374-d3370ba74049" >
+				<munit:payload value='#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;  customerName: "Pradeep",&#10;  customerEmail: "pradeep@gmail.com",&#10;  items: [&#10;    {&#10;      productId: "P001",&#10;      quantity: 2&#10;    }&#10;  ]&#10;}]' mediaType="application/json" />
+			</munit:set-event>
+			<flow-ref doc:name="Flow-ref to post:\orders:application\json:Router" doc:id="07dfed53-9881-4b05-9220-231f3de4b836" name="post:\orders:application\json:Router"/>
+		</munit:execution>
+	</munit:test>
+
+
+</mule>

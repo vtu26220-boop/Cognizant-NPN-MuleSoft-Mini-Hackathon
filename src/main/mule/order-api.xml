@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="a779b29f-d0f2-4e25-938e-d5450bf4a58e">
+        <http:listener-connection host="0.0.0.0" port="8081" />
+    </http:listener-config>
+    <apikit:config name="Router" api="order-api.raml" outboundHeadersMapName="outboundHeadersMapName" httpStatusVarName="httpStatus" />
+    <http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="3a714053-7324-4ad3-b752-49a2ed9fcf52" >
+		<http:request-connection host="localhost" port="8081" />
+	</http:request-config>
+	<flow name="order-apiFlow" doc:id="b1697399-a535-4570-bef2-f0f7729aee0c">
+        <http:listener doc:name="Listener" doc:id="1de6ec3f-8258-482d-819e-7a8992f78803" config-ref="HTTP_Listener_config" path="/orders" allowedMethods="POST" >
+			<http:response statusCode="#[vars.httpStatus default 200]" />
+		</http:listener>
+        <apikit:router doc:name="APIkit Router" doc:id="ff055bab-14bf-4e8c-ad50-0df708f4623b" config-ref="Router" />
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="4f5cc260-4fb0-4493-af30-5602d9505684" type="APP:INSUFFICIENT_STOCK">
+				<set-variable value="409" doc:name="Set Variable" doc:id="7a394aae-02a0-4f28-bbbf-71667745e5f1" variableName="httpStatus"/>
+				<ee:transform doc:name="Transform Message" doc:id="7a0a2d8c-1c68-49cd-9dc9-416fd8c8422b" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    errorCode: "INSUFFICIENT_STOCK",
+    message: "Insufficient stock"
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</on-error-continue>
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="37ba238b-b4d9-4b68-b0c2-2337bb72b9f0" type="APP:PRODUCT_NOT_FOUND">
+				<set-variable value="404" doc:name="Set Variable" doc:id="ec97ddc6-ab2f-42f3-9c35-645f319e737a" variableName="httpStatus"/>
+				<ee:transform doc:name="Transform Message" doc:id="367c0a8e-d0cf-41cf-9dbc-a09a3f6272f1" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    errorCode: "PRODUCT_NOT_FOUND",
+    message: "Product not found"
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</on-error-continue>
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="8f35c752-b77f-490b-9b62-08599bce636b" type="APP:EXTERNAL_API_ERROR">
+				<set-variable value="502" doc:name="Set Variable" doc:id="0e0d7563-67ba-47c6-8c04-598af880e205" variableName="httpStatus"/>
+				<ee:transform doc:name="Transform Message" doc:id="fcd01f04-5660-40fa-ab11-1fa0f00c2f05" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    errorCode: "EXTERNAL_API_ERROR",
+    message: "External API failure"
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</on-error-continue>
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="41fad250-ada8-4c49-93d0-85e0741b0789" type="APP:INVALID_REQUEST">
+				<set-variable value="400" doc:name="Set Variable" doc:id="77b75c66-4e3f-49e7-a14d-a4f15bdb0198" variableName="httpStatus"/>
+				<ee:transform doc:name="Transform Message" doc:id="48a82c89-11f4-4f5a-9bce-a7cd9638ddf8" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    errorCode: "INVALID_REQUEST",
+    message: "Invalid order request"
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</on-error-continue>
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="e9c2a72b-8be7-41af-9654-cc05f6274e3f" type="ANY">
+				<set-variable value="500" doc:name="Set Variable" doc:id="2fc950a7-6787-43b1-956d-833db63c17b3" variableName="httpStatus"/>
+				<ee:transform doc:name="Transform Message" doc:id="b9732f6f-5d1c-4446-b635-4cfecf92307d" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    errorCode: "INTERNAL_SERVER_ERROR",
+    message: "Unexpected error"
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</on-error-continue>
+		</error-handler>
+    </flow>
+    <flow name="post:\orders:application\json:Router">
+        <choice doc:name="Choice" doc:id="cf146f0f-c56f-477d-b846-80d4831f140f" >
+			<when expression='isEmpty(payload.customerId default "") or isEmpty(payload.customerName default "") or isEmpty(payload.customerEmail default "") or isEmpty(payload.items default [])'>
+				<raise-error doc:name="Raise error" doc:id="30aca018-aa80-4709-a0df-95e3c2dd1e33" type="APP:INVALID_REQUEST" description="Invalid order request"/>
+			</when>
+			<otherwise >
+				<set-variable value="0" doc:name="Set Variable" doc:id="02ffa167-2e15-441f-9efa-9c70bd5a3e0f" variableName="subtotal"/>
+				<set-variable value=" #[payload.customerId]" doc:name="Set Variable" doc:id="28fb9c96-a71b-4239-8885-781ad99e1a15" variableName="customerId" />
+				<foreach doc:name="For Each" doc:id="ac669dd9-cc94-45cb-86b4-f1f0250622b3" collection="#[payload.items]">
+					<set-variable value="#[payload.quantity]" doc:name="Set Variable" doc:id="6b1a33d0-4566-4c46-bc9d-678c70ec2510" variableName="quantity"/>
+					<try doc:name="Try" doc:id="6c296572-1113-4dd4-abbb-6f2045c4314b" >
+						<http:request method="GET" doc:name="Request" doc:id="bb7da1a8-e710-4f8f-b6e0-37012099d315" config-ref="HTTP_Request_configuration" path='#["/products/" ++ payload.productId]'/>
+						<error-handler >
+							<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="84095bb7-7f50-4e10-b2a2-2e7eebccd683" type="HTTP:NOT_FOUND">
+								<set-variable value="#[true]" doc:name="Set Variable" doc:id="851503c7-95be-43d6-b04a-2a26de897f97" variableName="productNotFound"/>
+							</on-error-continue>
+							<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="aa4492c6-4029-431d-bfa7-a35bbc011975" type="HTTP:CONNECTIVITY">
+								<set-variable value="502" doc:name="Set Variable" doc:id="b66f6646-9775-4695-8a6e-fc73496130c3" variableName="httpStatus"/>
+								<ee:transform doc:name="Transform Message" doc:id="dc97c77b-2bf3-4913-9df8-494a45543884" >
+									<ee:message >
+										<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    errorCode: "EXTERNAL_API_ERROR",
+    message: "External API failure"
+}]]></ee:set-payload>
+									</ee:message>
+								</ee:transform>
+								<raise-error doc:name="Raise error" doc:id="d0d75bd1-24a4-40ad-bb02-8b670ab6d035" type="APP:EXTERNAL_API_ERROR" description="External API failure"/>
+							</on-error-continue>
+						</error-handler>
+					</try>
+					<choice doc:name="Choice" doc:id="bea44526-9fe4-4a9f-9f37-1741f6a34461" >
+						<when expression="vars.productNotFound == true">
+							<set-variable value="404" doc:name="Set Variable" doc:id="44dae5db-622d-492e-bf5e-b2ae48353a40" variableName="httpStatus"/>
+							<ee:transform doc:name="Transform Message" doc:id="084cc8d9-f9b8-49e7-9c46-c43467a44fdf" >
+								<ee:message >
+									<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    errorCode: "PRODUCT_NOT_FOUND",
+    message: "Product not found"
+}]]></ee:set-payload>
+								</ee:message>
+							</ee:transform>
+							<raise-error doc:name="Raise error" doc:id="88cab93a-1b1d-4524-8630-8f702041b3e9" type="APP:PRODUCT_NOT_FOUND" description="Product not found"/>
+						</when>
+					</choice>
+					<choice doc:name="Choice" doc:id="2b5690d7-8738-4a1f-b437-ada293faffb2">
+						<when expression="vars.productNotFound != true and (vars.quantity default 0) &gt; (payload.availableStock default 0)">
+							<raise-error doc:name="Raise error" doc:id="25f8734e-8123-4d3e-a5c9-50fa259fbcef" type="APP:INSUFFICIENT_STOCK" description="Insufficient stock for requested product"/>
+						</when>
+						<otherwise >
+							<set-variable value="#[%dw 2.0&#10;output application/java&#10;---&#10;(vars.subtotal default 0)&#10;+&#10;((payload.price default 0) * (vars.quantity default 0))]" doc:name="Set Variable" doc:id="236a7dc9-f46a-4867-9627-507c090abeec" variableName="subtotal"/>
+						</otherwise>
+					</choice>
+				</foreach>
+				<http:request method="POST" doc:name="Request" doc:id="aca53f03-8aef-4982-9ad0-d62a3a86f19c" config-ref="HTTP_Request_configuration" path="/orders/create">
+					<http:body ><![CDATA[#[%dw 2.0
+output application/json
+---
+{
+    customerId: vars.customerId
+}]]]></http:body>
+				</http:request>
+				<http:request method="POST" doc:name="Request" doc:id="fe683c36-4139-436f-b837-e95fa3989161" config-ref="HTTP_Request_configuration" url="http://localhost:8081/notifications"/>
+				<ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" doc:name="Transform Message">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+
+var subtotal = (vars.subtotal default 0) as Number
+var discount = if (subtotal > 10000) subtotal * 0.10 else 0
+---
+{
+    orderId: "ORD1001",
+    customerId: vars.customerId,
+    subtotal: subtotal,
+    discount: discount,
+    totalAmount: subtotal - discount,
+    status: "CONFIRMED",
+    message: "Order created successfully"
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+			</otherwise>
+		</choice>
+    </flow>
+	<flow name="product-apiFlow1" doc:id="ca3d62ef-b393-48d2-81d4-e2452ea5829f" >
+		<http:listener doc:name="Listener" doc:id="cd6761e0-d40d-48c5-a184-3937e81c1094" config-ref="HTTP_Listener_config" path="/products/{productId}">
+			<http:response statusCode="#[vars.httpStatus default 200]" />
+		</http:listener>
+		<ee:transform doc:name="Transform Message" doc:id="9ee46672-9437-461f-850c-4ffdb20034e4" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+
+var products = {
+
+    P001: {
+        productId: "P001",
+        productName: "Laptop",
+        price: 5000,
+        availableStock: 10
+    },
+
+    P002: {
+        productId: "P002",
+        productName: "Mouse",
+        price: 2000,
+        availableStock: 5
+    },
+
+    P003: {
+        productId: "P003",
+        productName: "Keyboard",
+        price: 3000,
+        availableStock: 8
+    },
+
+    P004: {
+        productId: "P004",
+        productName: "Headphones",
+        price: 1500,
+        availableStock: 20
+    }
+
+}
+---
+products[(attributes.uriParams.productId default "")]]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<choice doc:name="Choice" doc:id="eb2e6f43-c971-4bf2-91d0-cf514d651683" >
+			<when expression="payload == null">
+				<raise-error doc:name="Raise error" doc:id="63800e3a-4af0-4f20-a804-729be27d771c" type="APP:PRODUCT_NOT_FOUND" description="Product not found"/>
+			</when>
+		</choice>
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="a56cc8a0-9595-4da8-8190-6b658ff9b81a" >
+				<set-variable value="404" doc:name="Set Variable" doc:id="5190bb7f-0ea4-4440-9d6a-24624bcdffe9" variableName="httpStatus"/>
+				<ee:transform doc:name="Transform Message" doc:id="0ba0de0c-9584-4f7d-bb10-0b2d77dcb749" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    errorCode: "PRODUCT_NOT_FOUND",
+    message: "Product not found"
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+</mule>
