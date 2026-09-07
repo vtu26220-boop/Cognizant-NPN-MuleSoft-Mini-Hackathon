@@ -173,6 +173,7 @@ var discount = if (subtotal > 10000) subtotal * 0.10 else 0
 }]]></ee:set-payload>
             </ee:message>
         </ee:transform>
+				<raise-error doc:name="Raise error" doc:id="c74381d2-4418-4ef3-8394-a7e7581a1463" type="MULE:EXPRESSION" description="Test 500 error"/>
 			</otherwise>
 		</choice>
     </flow>
