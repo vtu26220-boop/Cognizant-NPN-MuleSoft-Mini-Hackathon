@@ -1,1 +1,117 @@
 
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:email="http://www.mulesoft.org/schema/mule/email"
+      xmlns:tls="http://www.mulesoft.org/schema/mule/tls"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd 
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd 
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd 
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd 
+        http://www.mulesoft.org/schema/mule/core
+        http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http
+        http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/ee/core
+        http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+        http://www.mulesoft.org/schema/mule/email
+        http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd
+        http://www.mulesoft.org/schema/mule/tls
+        http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd">
+
+    <http:listener-config name="HTTP_Listener_config">
+        <http:listener-connection
+            host="0.0.0.0"
+            port="8083"/>
+    </http:listener-config>
+
+    <email:smtp-config name="Email_SMTP">
+
+        <email:smtps-connection
+            host="smtp.gmail.com"
+            port="465"
+            user="j49520262@gmail.com"
+            password="mcfc mbvd dyer vzql">
+
+            <tls:context enabledProtocols="TLSv1.2">
+                <tls:trust-store insecure="true"/>
+            </tls:context>
+
+        </email:smtps-connection>
+
+    </email:smtp-config>
+
+    <flow name="notification-api-flow">
+
+        <http:listener
+            config-ref="HTTP_Listener_config"
+            path="/notifications"
+            allowedMethods="POST"/>
+
+        <ee:transform>
+            <ee:message>
+                <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    notificationId: "NOT-" ++ ((randomInt(9000) + 1000) as String),
+    customerId: payload.customerId,
+    customerEmail: payload.customerEmail,
+    orderId: payload.orderId,
+    notificationType: "ORDER_CONFIRMATION",
+    status: "SENT",
+    message: "Order confirmation notification sent successfully"
+}
+                ]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+
+        <set-variable
+            variableName="notification"
+            value="#[payload]"/>
+
+        <email:send
+            config-ref="Email_SMTP"
+            fromAddress="j49520262@gmail.com"
+            subject="#['Order Confirmation - ' ++ vars.notification.orderId]">
+
+            <email:to-addresses>
+                <email:to-address
+                    value="#[vars.notification.customerEmail]"/>
+            </email:to-addresses>
+
+            <email:body contentType="text/plain">
+                <email:content><![CDATA[
+#[ "Hello,
+
+Your order has been confirmed successfully.
+
+Customer ID: " ++ vars.notification.customerId ++ "
+
+Order ID: " ++ vars.notification.orderId ++ "
+
+Thank you for your order." ]
+                ]]></email:content>
+            </email:body>
+
+        </email:send>
+
+        <ee:transform>
+            <ee:message>
+                <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+vars.notification
+                ]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+
+    </flow>
+
+</mule>
