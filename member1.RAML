@@ -1,1 +1,514 @@
 
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd 
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd 
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd 
+        http://www.mulesoft.org/schema/mule/mule-apikit
+        http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd
+        http://www.mulesoft.org/schema/mule/http
+        http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/ee/core
+        http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+        http://www.mulesoft.org/schema/mule/core
+        http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+
+    <!-- ===================================================== -->
+    <!-- HTTP LISTENER CONFIG                                  -->
+    <!-- ===================================================== -->
+
+    <http:listener-config name="order-api-httpListenerConfig"
+                          doc:name="HTTP Listener Config">
+        <http:listener-connection host="0.0.0.0"
+                                  port="8081"/>
+    </http:listener-config>
+
+
+    <!-- ===================================================== -->
+    <!-- APIKIT CONFIGURATION                                  -->
+    <!-- ===================================================== -->
+
+    <apikit:config name="order-api-config"
+                   api="order-api.raml"
+                   outboundHeadersMapName="outboundHeaders"
+                   httpStatusVarName="httpStatus"/>
+
+
+    <!-- ===================================================== -->
+    <!-- MAIN API FLOW                                         -->
+    <!-- ===================================================== -->
+
+    <flow name="order-api-main">
+
+        <http:listener config-ref="order-api-httpListenerConfig"
+                       path="/api/v1/*"
+                       doc:name="API Listener"/>
+
+        <apikit:router config-ref="order-api-config"
+                       doc:name="APIkit Router"/>
+
+    </flow>
+
+
+    <!-- ===================================================== -->
+    <!-- APIKIT CONSOLE                                        -->
+    <!-- ===================================================== -->
+
+    <flow name="order-api-console">
+
+        <http:listener config-ref="order-api-httpListenerConfig"
+                       path="/console/*"
+                       doc:name="APIkit Console Listener"/>
+
+        <apikit:console config-ref="order-api-config"
+                        doc:name="APIkit Console"/>
+
+    </flow>
+
+
+    <!-- ===================================================== -->
+    <!-- POST /orders FLOW                                     -->
+    <!-- ===================================================== -->
+
+    <flow name="post:\orders:application\json:order-api-config">
+
+        <logger level="INFO"
+                message="Received order request"
+                doc:name="Log Order Request"/>
+
+
+        <!-- ================================================= -->
+        <!-- VALIDATE ORDER REQUEST                            -->
+        <!-- ================================================= -->
+
+        <choice doc:name="Validate Order Request">
+
+            <when expression="#[
+                payload.customerId == null
+                or isEmpty(payload.customerId)
+                or payload.customerName == null
+                or isEmpty(payload.customerName)
+                or payload.customerEmail == null
+                or isEmpty(payload.customerEmail)
+                or payload.items == null
+                or sizeOf(payload.items) == 0
+            ]">
+
+                <raise-error type="APP:INVALID_REQUEST"
+                             description="Invalid order request. Required customer information or order items are missing."
+                             doc:name="Invalid Request"/>
+
+            </when>
+
+
+            <otherwise>
+
+                <!-- ========================================= -->
+                <!-- STORE ORIGINAL ORDER                      -->
+                <!-- ========================================= -->
+
+                <set-variable variableName="order"
+                              value="#[payload]"
+                              doc:name="Store Order"/>
+
+
+                <!-- ========================================= -->
+                <!-- INITIALIZE SUBTOTAL                       -->
+                <!-- ========================================= -->
+
+                <set-variable variableName="subtotal"
+                              value="#[0]"
+                              doc:name="Initialize Subtotal"/>
+
+
+                <!-- ========================================= -->
+                <!-- PROCESS ORDER ITEMS                       -->
+                <!-- ========================================= -->
+
+                <foreach collection="#[vars.order.items]"
+                         doc:name="Process Order Items">
+
+
+                    <!-- ===================================== -->
+                    <!-- STORE CURRENT ITEM                    -->
+                    <!-- ===================================== -->
+
+                    <set-variable variableName="currentItem"
+                                  value="#[payload]"
+                                  doc:name="Store Current Item"/>
+
+
+                    <!-- ===================================== -->
+                    <!-- CALL PRODUCT API                      -->
+                    <!-- ===================================== -->
+
+                    <http:request method="GET"
+                                  url="http://localhost:8082/products/#[vars.currentItem.productId]"
+                                  doc:name="Get Product"/>
+
+
+                    <!-- ===================================== -->
+                    <!-- STORE PRODUCT RESPONSE                -->
+                    <!-- ===================================== -->
+
+                    <set-variable variableName="product"
+                                  value="#[payload]"
+                                  doc:name="Store Product"/>
+
+
+                    <!-- ===================================== -->
+                    <!-- PRODUCT NOT FOUND CHECK               -->
+                    <!-- ===================================== -->
+
+                    <choice doc:name="Check Product">
+
+                        <when expression="#[
+                            vars.product.productName == 'Unknown'
+                        ]">
+
+                            <raise-error type="APP:PRODUCT_NOT_FOUND"
+                                         description="#['Product not found: ' ++ vars.currentItem.productId]"
+                                         doc:name="Product Not Found"/>
+
+                        </when>
+
+
+                        <otherwise>
+
+                            <!-- ================================= -->
+                            <!-- STOCK CHECK                       -->
+                            <!-- ================================= -->
+
+                            <choice doc:name="Check Stock">
+
+                                <when expression="#[
+                                    vars.product.availableStock
+                                    &lt;
+                                    vars.currentItem.quantity
+                                ]">
+
+                                    <raise-error type="APP:INSUFFICIENT_STOCK"
+                                                 description="#['Insufficient stock for product ' ++ vars.currentItem.productId]"
+                                                 doc:name="Insufficient Stock"/>
+
+                                </when>
+
+
+                                <otherwise>
+
+                                    <!-- ============================= -->
+                                    <!-- UPDATE SUBTOTAL               -->
+                                    <!-- ============================= -->
+
+                                    <set-variable variableName="subtotal"
+                                                  value="#[vars.subtotal + (vars.product.price * vars.currentItem.quantity)]"
+                                                  doc:name="Update Subtotal"/>
+
+                                </otherwise>
+
+                            </choice>
+
+                        </otherwise>
+
+                    </choice>
+
+                </foreach>
+
+
+                <!-- ================================================= -->
+                <!-- CALCULATE DISCOUNT                                -->
+                <!-- ================================================= -->
+
+                <set-variable variableName="discount"
+                              value="#[
+                                if (vars.subtotal &gt; 10000)
+                                    vars.subtotal * 0.10
+                                else
+                                    0
+                              ]"
+                              doc:name="Calculate Discount"/>
+
+
+                <!-- ================================================= -->
+                <!-- CALCULATE TOTAL                                   -->
+                <!-- ================================================= -->
+
+                <set-variable variableName="total"
+                              value="#[
+                                vars.subtotal - vars.discount
+                              ]"
+                              doc:name="Calculate Total"/>
+
+
+                <!-- ================================================= -->
+                <!-- ORDER MANAGEMENT API                              -->
+                <!-- ================================================= -->
+
+                <http:request method="POST"
+                              url="http://localhost:8083/orders"
+                              doc:name="Create Order">
+
+                    <http:body><![CDATA[
+#[
+{
+    customerId: vars.order.customerId,
+    customerName: vars.order.customerName,
+    customerEmail: vars.order.customerEmail,
+    items: vars.order.items,
+    subtotal: vars.subtotal,
+    discount: vars.discount,
+    total: vars.total
+}
+]
+                    ]]></http:body>
+
+                </http:request>
+
+
+                <!-- ================================================= -->
+                <!-- SAVE ORDER MANAGEMENT RESPONSE                    -->
+                <!-- ================================================= -->
+
+                <set-variable variableName="orderResponse"
+                              value="#[payload]"
+                              doc:name="Store Order Response"/>
+
+
+                <!-- ================================================= -->
+                <!-- NOTIFICATION API                                  -->
+                <!-- ================================================= -->
+
+                <http:request method="POST"
+                              url="http://localhost:8084/notifications"
+                              doc:name="Send Customer Notification">
+
+                    <http:body><![CDATA[
+#[
+{
+    customerEmail: vars.order.customerEmail,
+    customerName: vars.order.customerName,
+    orderId: vars.orderResponse.orderId,
+    total: vars.total
+}
+]
+                    ]]></http:body>
+
+                </http:request>
+
+
+                <!-- ================================================= -->
+                <!-- FINAL RESPONSE                                    -->
+                <!-- ================================================= -->
+
+                <ee:transform doc:name="Final Order Response">
+
+                    <ee:message>
+
+                        <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    message: "Order created successfully",
+    orderId: vars.orderResponse.orderId,
+    customerId: vars.order.customerId,
+    customerName: vars.order.customerName,
+    subtotal: vars.subtotal,
+    discount: vars.discount,
+    total: vars.total,
+    status: "CONFIRMED"
+}
+                        ]]></ee:set-payload>
+
+                    </ee:message>
+
+                </ee:transform>
+
+            </otherwise>
+
+        </choice>
+
+
+        <!-- ================================================= -->
+        <!-- ERROR HANDLER                                    -->
+        <!-- ================================================= -->
+
+        <error-handler>
+
+
+            <!-- ============================================= -->
+            <!-- INVALID REQUEST - 400                        -->
+            <!-- ============================================= -->
+
+            <on-error-continue type="APP:INVALID_REQUEST"
+                               enableNotifications="false"
+                               logException="false"
+                               doc:name="Invalid Request Handler">
+
+                <set-variable variableName="httpStatus"
+                              value="#[400]"/>
+
+                <ee:transform doc:name="400 Response">
+
+                    <ee:message>
+
+                        <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    error: "INVALID_REQUEST",
+    message: "Invalid order request. Required customer information or order items are missing."
+}
+                        ]]></ee:set-payload>
+
+                    </ee:message>
+
+                </ee:transform>
+
+            </on-error-continue>
+
+
+            <!-- ============================================= -->
+            <!-- PRODUCT NOT FOUND - 404                      -->
+            <!-- ============================================= -->
+
+            <on-error-continue type="APP:PRODUCT_NOT_FOUND"
+                               enableNotifications="false"
+                               logException="false"
+                               doc:name="Product Not Found Handler">
+
+                <set-variable variableName="httpStatus"
+                              value="#[404]"/>
+
+                <ee:transform doc:name="404 Response">
+
+                    <ee:message>
+
+                        <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    error: "PRODUCT_NOT_FOUND",
+    message: error.description
+}
+                        ]]></ee:set-payload>
+
+                    </ee:message>
+
+                </ee:transform>
+
+            </on-error-continue>
+
+
+            <!-- ============================================= -->
+            <!-- INSUFFICIENT STOCK - 409                     -->
+            <!-- ============================================= -->
+
+            <on-error-continue type="APP:INSUFFICIENT_STOCK"
+                               enableNotifications="false"
+                               logException="false"
+                               doc:name="Insufficient Stock Handler">
+
+                <set-variable variableName="httpStatus"
+                              value="#[409]"/>
+
+                <ee:transform doc:name="409 Response">
+
+                    <ee:message>
+
+                        <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    error: "INSUFFICIENT_STOCK",
+    message: error.description
+}
+                        ]]></ee:set-payload>
+
+                    </ee:message>
+
+                </ee:transform>
+
+            </on-error-continue>
+
+
+            <!-- ============================================= -->
+            <!-- EXTERNAL API CONNECTIVITY - 502              -->
+            <!-- ============================================= -->
+
+            <on-error-continue type="HTTP:CONNECTIVITY"
+                               enableNotifications="false"
+                               logException="false"
+                               doc:name="External API Failure Handler">
+
+                <set-variable variableName="httpStatus"
+                              value="#[502]"/>
+
+                <ee:transform doc:name="502 Response">
+
+                    <ee:message>
+
+                        <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    error: "BAD_GATEWAY",
+    message: "External service is unavailable."
+}
+                        ]]></ee:set-payload>
+
+                    </ee:message>
+
+                </ee:transform>
+
+            </on-error-continue>
+
+
+            <!-- ============================================= -->
+            <!-- ANY UNEXPECTED ERROR - 500                   -->
+            <!-- ============================================= -->
+
+            <on-error-continue type="ANY"
+                               enableNotifications="false"
+                               logException="false"
+                               doc:name="Unexpected Error Handler">
+
+                <set-variable variableName="httpStatus"
+                              value="#[500]"/>
+
+                <ee:transform doc:name="500 Response">
+
+                    <ee:message>
+
+                        <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    error: "INTERNAL_SERVER_ERROR",
+    message: "An unexpected error occurred while processing the order."
+}
+                        ]]></ee:set-payload>
+
+                    </ee:message>
+
+                </ee:transform>
+
+            </on-error-continue>
+
+        </error-handler>
+
+    </flow>
+
+</mule>
