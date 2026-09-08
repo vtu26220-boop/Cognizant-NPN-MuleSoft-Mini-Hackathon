@@ -1,0 +1,292 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd 
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd 
+        http://www.mulesoft.org/schema/mule/core
+        http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+
+        http://www.mulesoft.org/schema/mule/http
+        http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+
+        http://www.mulesoft.org/schema/mule/ee/core
+        http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <!-- ========================================================= -->
+    <!-- HTTP LISTENER CONFIGURATION                               -->
+    <!-- ========================================================= -->
+
+    <http:listener-config
+            name="HTTP_Listener_config"
+            doc:name="HTTP Listener Config">
+
+        <http:listener-connection
+                host="0.0.0.0"
+                port="8081"/>
+
+    </http:listener-config>
+
+
+    <!-- ========================================================= -->
+    <!-- GET PRODUCT API                                            -->
+    <!-- GET /products/{productId}                                  -->
+    <!-- ========================================================= -->
+
+    <flow name="product-api-flow"
+          doc:name="Product API">
+
+        <http:listener
+                config-ref="HTTP_Listener_config"
+                path="/products/{productId}"
+                allowedMethods="GET"
+                doc:name="Get Product">
+
+            <http:response
+                    statusCode="#[vars.httpStatus default 200]"/>
+
+        </http:listener>
+
+
+        <!-- Product lookup -->
+
+        <ee:transform doc:name="Find Product">
+
+            <ee:message>
+
+                <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+
+var products = {
+    P001: {
+        productId: "P001",
+        productName: "Laptop",
+        price: 5000,
+        availableStock: 10
+    },
+
+    P002: {
+        productId: "P002",
+        productName: "Mouse",
+        price: 2000,
+        availableStock: 5
+    },
+
+    P003: {
+        productId: "P003",
+        productName: "Keyboard",
+        price: 3000,
+        availableStock: 8
+    },
+
+    P004: {
+        productId: "P004",
+        productName: "Headphones",
+        price: 1500,
+        availableStock: 20
+    }
+}
+
+---
+products[attributes.uriParams.productId default ""]
+                ]]></ee:set-payload>
+
+            </ee:message>
+
+        </ee:transform>
+
+
+        <!-- Check product -->
+
+        <choice doc:name="Check Product">
+
+            <when expression="#[payload == null]">
+
+                <set-variable
+                        variableName="httpStatus"
+                        value="404"
+                        doc:name="Set 404 Status"/>
+
+                <ee:transform doc:name="Product Not Found">
+
+                    <ee:message>
+
+                        <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    errorCode: "PRODUCT_NOT_FOUND",
+    message: "Product not found"
+}
+                        ]]></ee:set-payload>
+
+                    </ee:message>
+
+                </ee:transform>
+
+            </when>
+
+            <otherwise>
+
+                <set-variable
+                        variableName="httpStatus"
+                        value="200"
+                        doc:name="Set 200 Status"/>
+
+            </otherwise>
+
+        </choice>
+
+    </flow>
+
+
+    <!-- ========================================================= -->
+    <!-- UPDATE STOCK API                                           -->
+    <!-- PUT /products/{productId}/stock                              -->
+    <!-- ========================================================= -->
+
+    <flow name="update-stock-flow"
+          doc:name="Update Product Stock">
+
+        <http:listener
+                config-ref="HTTP_Listener_config"
+                path="/products/{productId}/stock"
+                allowedMethods="PUT"
+                doc:name="Update Stock">
+
+            <http:response
+                    statusCode="#[vars.httpStatus default 200]"/>
+
+        </http:listener>
+
+
+        <!-- Read quantity from request -->
+
+        <ee:transform doc:name="Read Quantity">
+
+            <ee:message>
+
+                <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+---
+{
+    productId: attributes.uriParams.productId,
+    quantity: payload.quantity as Number
+}
+                ]]></ee:set-payload>
+
+            </ee:message>
+
+        </ee:transform>
+
+
+        <!-- ===================================================== -->
+        <!-- Store current stock in a flow variable for this run -->
+        <!-- ===================================================== -->
+
+        <set-variable
+                variableName="productId"
+                value="#[payload.productId]"
+                doc:name="Store Product ID"/>
+
+        <set-variable
+                variableName="quantity"
+                value="#[payload.quantity]"
+                doc:name="Store Quantity"/>
+
+
+        <!-- ===================================================== -->
+        <!-- Calculate new stock                                    -->
+        <!-- ===================================================== -->
+
+        <ee:transform doc:name="Calculate New Stock">
+
+            <ee:message>
+
+                <ee:set-payload><![CDATA[
+%dw 2.0
+output application/json
+
+var initialStock = {
+    P001: 10,
+    P002: 5,
+    P003: 8,
+    P004: 20
+}
+
+var productId = vars.productId
+var quantity = vars.quantity
+var currentStock = initialStock[productId] default null
+
+---
+if (currentStock == null)
+{
+    errorCode: "PRODUCT_NOT_FOUND",
+    message: "Product not found"
+}
+else if (quantity > currentStock)
+{
+    errorCode: "INSUFFICIENT_STOCK",
+    message: "Insufficient stock",
+    availableStock: currentStock,
+    requestedQuantity: quantity
+}
+else
+{
+    productId: productId,
+    previousStock: currentStock,
+    orderedQuantity: quantity,
+    availableStock: currentStock - quantity
+}
+                ]]></ee:set-payload>
+
+            </ee:message>
+
+        </ee:transform>
+
+
+        <!-- ===================================================== -->
+        <!-- Check result                                           -->
+        <!-- ===================================================== -->
+
+        <choice doc:name="Stock Result">
+
+            <when expression="#[payload.errorCode == 'PRODUCT_NOT_FOUND']">
+
+                <set-variable
+                        variableName="httpStatus"
+                        value="404"
+                        doc:name="Set 404 Status"/>
+
+            </when>
+
+            <when expression="#[payload.errorCode == 'INSUFFICIENT_STOCK']">
+
+                <set-variable
+                        variableName="httpStatus"
+                        value="409"
+                        doc:name="Set 409 Status"/>
+
+            </when>
+
+            <otherwise>
+
+                <set-variable
+                        variableName="httpStatus"
+                        value="200"
+                        doc:name="Set 200 Status"/>
+
+            </otherwise>
+
+        </choice>
+
+    </flow>
+
+</mule>
